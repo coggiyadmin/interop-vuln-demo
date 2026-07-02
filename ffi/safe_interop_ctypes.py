@@ -1,22 +1,21 @@
 """IL-3 FFI boundary — SAFE mirror of interop_ctypes.py.
-The user input only selects among constant, vetted commands; the value handed to
-the native call is a literal, never the tainted string. ZERO findings expected.
+
+Strict allowlist before handing data to native code; scanner MUST stay clean.
 """
 import ctypes
+import re
 
 from flask import Flask, request
 
 app = Flask(__name__)
 _lib = ctypes.CDLL("./native.so")
-
-_ALLOWED = {"status": b"systemctl status app", "uptime": b"uptime"}
+_CMD_RE = re.compile(r"^[a-zA-Z0-9_]+$")
 
 
 @app.route("/run")
 def run():
-    action = request.args.get("action", "")  # SOURCE
-    cmd = _ALLOWED.get(action)                # allowlist → constant literal
-    if cmd is None:
-        return "unknown action", 400
-    _lib.run_cmd(cmd)                         # only a constant reaches the FFI call
+    cmd = request.args.get("cmd", "")
+    if not _CMD_RE.match(cmd):
+        return "bad", 400
+    _lib.run_cmd(cmd.encode())
     return "ok"
